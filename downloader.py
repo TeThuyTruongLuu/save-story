@@ -15,12 +15,14 @@ import re
 import io
 import shutil
 
+from flask_cors import CORS
 app = Flask(__name__)
+CORS(app)  # Cho phép tất cả các nguồn gốc
 
 def setup_selenium():
     options = Options()
     options.add_argument("--headless")  # Run in headless mode
-    driver = webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(executable_path="chromedriver.exe", options=options)
     return driver
 
 def load_lofter_cookies(driver, cookie_file="lofter_cookies.json"):
