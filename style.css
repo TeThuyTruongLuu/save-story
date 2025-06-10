@@ -1,236 +1,294 @@
 body {
-	font-family: 'Quicksand', sans-serif;
-	background-color: #f7f1e3;
-	margin: 0;
-	padding: 20px;
-	display: flex;
-	justify-content: center;
+    font-family: 'Quicksand', sans-serif;
+    background-color: #f7f1e3;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
 }
 .container {
-	width: 90%;
-	max-width: 1000px;
-	background: white;
-	padding: 20px;
-	border-radius: 10px;
-	box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 1000px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 .toggle-container {
-	display: flex;
-	justify-content: center;
-	background: #f7f1e3;
-	border-radius: 50px;
-	padding: 5px;
-	width: fit-content;
-	margin: 0 auto 15px;
+    display: flex;
+    justify-content: center;
+    background: #f7f1e3;
+    border-radius: 50px;
+    padding: 5px;
+    width: fit-content;
+    margin: 0 auto 15px;
 }
 .toggle-btn {
-	font-family: 'Quicksand', sans-serif;
-	border: none;
-	background: none;
-	padding: 10px 20px;
-	font-size: 16px;
-	font-weight: bold;
-	color: #6c5ce7;
-	cursor: pointer;
-	transition: 0.3s ease;
+    font-family: 'Quicksand', sans-serif;
+    border: none;
+    background: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #6c5ce7;
+    cursor: pointer;
+    transition: 0.3s ease;
 }
 .toggle-btn:hover {
-	color: white;
-	background: #6c5ce7;
-	border-radius: 50px;
+    color: white;
+    background: #6c5ce7;
+    border-radius: 50px;
 }
 .toggle-btn.active {
-	background: #6c5ce7;
-	color: white;
-	border-radius: 50px;
+    background: #6c5ce7;
+    color: white;
+    border-radius: 50px;
 }
 .section {
-	display: none;
-	background: white;
-	padding: 20px;
-	border-radius: 8px;
-	box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    display: none;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 .section.active {
-	display: block;
+    display: block;
 }
 .input-container {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 .flex-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 15px;
-	align-items: center;
-	justify-content: space-between;
-	padding-bottom: 10px;
-	position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    position: relative;
 }
 .flex-row label {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 .flex-row input, .flex-row select {
-	flex: 1;
-	padding: 8px;
-	border: 1px solid #ccc;
-	border-radius: 5px;
-	margin-left: 10px;
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin-left: 10px;
 }
 .flex-row .tag-input {
-	flex: 4;
+    flex: 4;
 }
 .suggestions-box {
-	position: absolute;
-	top: 100%;
-	left: 0;
-	width: 100%;
-	background: white;
-	border: 1px solid #ccc;
-	max-height: 150px;
-	overflow-y: auto;
-	display: none;
-	z-index: 10;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: white;
+    border: 1px solid #ccc;
+    max-height: 150px;
+    overflow-y: auto;
+    display: none;
+    z-index: 10;
 }
 .suggestions-box div {
-	padding: 8px;
-	cursor: pointer;
+    padding: 8px;
+    cursor: pointer;
 }
 .suggestions-box div:hover {
-	background: #eee;
+    background: #eee;
 }
 .flex-row .rating-input {
-	flex: 1;
-	display: flex;
-	align-items: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
 }
 .rating-input input {
-	margin-right: 10px;
+    margin-right: 10px;
 }
 .wide-input {
-	width: 100%;
+    width: 100%;
 }
 input, select, textarea {
-	width: 100%;
-	padding: 10px;
-	border: 1px solid #ccc;
-	border-radius: 5px;
-	margin-bottom: 10px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin-bottom: 10px;
 }
 button {
-	padding: 10px 20px;
-	background-color: #6c5ce7;
-	color: white;
-	border: none;
-	border-radius: 5px;
-	cursor: pointer;
-	font-size: 16px;
-	font-weight: bold;
+    padding: 10px 20px;
+    background-color: #6c5ce7;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
 }
 button:hover {
-	background: #5a4ae0;
+    background: #5a4ae0;
 }
 .button-container {
-	display: flex;
-	justify-content: center;
-	gap: 10px;
-	margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
 }
 .table-container {
-	max-width: 100%;
-	overflow-x: auto;
+    max-width: 100%;
+    overflow-x: auto;
 }
 table {
-	width: 100%;
-	border-collapse: collapse;
-	margin-top: 15px;
-	background: white;
-	border-radius: 5px;
-	overflow: hidden;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    background: white;
+    border-radius: 5px;
+    overflow: hidden;
 }
 th, td {
-	border: 1px solid #ddd;
-	padding: 10px;
-	text-align: left;
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+th:nth-child(1), td:nth-child(1) { /* STT */
+    width: 3%;
+}
+th:nth-child(2), td:nth-child(2) { /* Tên truyện */
+    width: 30%;
+    max-width: 350px;
+    overflow-wrap: break-word;
+}
+th:nth-child(3), td:nth-child(3) { /* Tag */
+    width: 20%;
+    overflow-wrap: break-word;
+}
+th:nth-child(4), td:nth-child(4) { /* Tác giả */
+    width: 15%;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+th:nth-child(5), td:nth-child(5) { /* Edit/Beta */
+    width: 10%;
+    overflow-wrap: break-word;
+}
+th:nth-child(6), td:nth-child(6) { /* Tình trạng */
+    width: 5%;
+}
+th:nth-child(7), td:nth-child(7) { /* Link */
+    width: 5%;
+}
+th:nth-child(8), td:nth-child(8) { /* Review */
+    width: 15%;
+    overflow-wrap: break-word;
+}
+th:nth-child(9), td:nth-child(9) { /* Xóa */
+    width: 5%;
 }
 th {
-	background-color: #dfe6e9;
-	cursor: pointer;
+    background-color: #dfe6e9;
+    cursor: pointer;
 }
 .delete-btn {
-	cursor: pointer;
-	color: red;
-	font-weight: bold;
+    cursor: pointer;
+    color: red;
+    font-weight: bold;
 }
 .pagination {
-	display: flex;
-	justify-content: center;
-	margin-top: 15px;
-	gap: 5px;
+    display: flex;
+    justify-content: center;
+    margin-top: 15px;
+    gap: 5px;
 }
 .pagination button {
-	padding: 8px 12px;
-	border: 1px solid #6c5ce7;
-	background-color: #f7f1e3;
-	color: #6c5ce7;
-	cursor: pointer;
-	border-radius: 5px;
-	font-size: 14px;
+    padding: 8px 12px;
+    border: 1px solid #6c5ce7;
+    background-color: #f7f1e3;
+    color: #6c5ce7;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 14px;
 }
 .pagination button.active {
-	background-color: #6c5ce7;
-	color: white;
+    background-color: #6c5ce7;
+    color: white;
 }
 .pagination button:hover {
-	background-color: #5a4ae0;
-	color: white;
+    background-color: #5a4ae0;
+    color: white;
 }
 .hidden { display: none; }
 #epub input, #epub textarea, #epub button {
-	max-width: 95%;
-	display: block;
+    max-width: 95%;
+    display: block;
 }
 @media (max-width: 600px) {
-	.table-container {
-		max-height: 400px;
-		overflow-y: auto;
-	}
-	table {
-		min-width: 600px;
-	}
-	button { width: 50%; }
-	td, th {
-		word-wrap: break-word;
-		white-space: normal;
-	}
-	td:nth-child(2) {
-		min-width: 120px;
-		max-width: 250px;
-	}
-	td:nth-child(3) {
-		min-width: 70px grants;
-		max-width: 100px;
-	}
-	.toggle-container {
-		width: 100%;
-	}
-	.toggle-btn {
-		flex: 1;
-		font-size: 14px;
-		padding: 8px;
-	}
-	.flex-row {
-		flex-direction: column;
-	}
-	.flex-row label {
-		width: 100%;
-	}
-	.button-container {
-		flex-direction: column;
-		align-items: center;
-	}
+    .table-container {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    table {
+        min-width: 600px;
+    }
+    button { width: 50%; }
+    td, th {
+        word-wrap: break-word;
+        white-space: normal;
+    }
+    th:nth-child(1), td:nth-child(1) { /* STT */
+        width: 3%;
+    }
+    th:nth-child(2), td:nth-child(2) { /* Tên truyện */
+        min-width: 120px;
+        max-width: 350px;
+    }
+    th:nth-child(3), td:nth-child(3) { /* Tag */
+        min-width: 70px;
+        max-width: 100px;
+    }
+    th:nth-child(4), td:nth-child(4) { /* Tác giả */
+        min-width: 80px;
+        max-width: 150px;
+    }
+    th:nth-child(5), td:nth-child(5) { /* Edit/Beta */
+        min-width: 60px;
+        max-width: 100px;
+    }
+    th:nth-child(6), td:nth-child(6) { /* Tình trạng */
+        min-width: 50px;
+    }
+    th:nth-child(7), td:nth-child(7) { /* Link */
+        min-width: 50px;
+    }
+    th:nth-child(8), td:nth-child(8) { /* Review */
+        min-width: 80px;
+        max-width: 150px;
+    }
+    th:nth-child(9), td:nth-child(9) { /* Xóa */
+        min-width: 40px;
+    }
+    .toggle-container {
+        width: 100%;
+    }
+    .toggle-btn {
+        flex: 1;
+        font-size: 14px;
+        padding: 8px;
+    }
+    .flex-row {
+        flex-direction: column;
+    }
+    .flex-row label {
+        width: 100%;
+    }
+    .button-container {
+        flex-direction: column;
+        align-items: center;
+    }
 }
