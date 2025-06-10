@@ -169,9 +169,10 @@ th:nth-child(3), td:nth-child(3) { /* Tag */
     width: 20%;
     overflow-wrap: break-word;
 }
-th:nth-child(4), td:nth-child(4) { /* Tác giả */
+th:nth-child(4), td:nth-child(4) {
     width: 15%;
     white-space: normal;
+	word-break: break-all;
     overflow-wrap: break-word;
 }
 th:nth-child(5), td:nth-child(5) { /* Edit/Beta */
@@ -228,6 +229,16 @@ th {
     max-width: 95%;
     display: block;
 }
+
+@media (max-width: 800px) {
+    th:nth-child(4), td:nth-child(4) { /* Tác giả */
+        width: 15%;
+        min-width: 80px;
+        max-width: 150px;
+        overflow-wrap: break-word;
+    }
+}
+
 @media (max-width: 600px) {
     .table-container {
         max-height: 400px;
@@ -240,38 +251,6 @@ th {
     td, th {
         word-wrap: break-word;
         white-space: normal;
-    }
-    th:nth-child(1), td:nth-child(1) { /* STT */
-        width: 3%;
-    }
-    th:nth-child(2), td:nth-child(2) { /* Tên truyện */
-        min-width: 120px;
-        max-width: 350px;
-    }
-    th:nth-child(3), td:nth-child(3) { /* Tag */
-        min-width: 70px;
-        max-width: 100px;
-    }
-    th:nth-child(4), td:nth-child(4) { /* Tác giả */
-        min-width: 80px;
-        max-width: 150px;
-    }
-    th:nth-child(5), td:nth-child(5) { /* Edit/Beta */
-        min-width: 60px;
-        max-width: 100px;
-    }
-    th:nth-child(6), td:nth-child(6) { /* Tình trạng */
-        min-width: 50px;
-    }
-    th:nth-child(7), td:nth-child(7) { /* Link */
-        min-width: 50px;
-    }
-    th:nth-child(8), td:nth-child(8) { /* Review */
-        min-width: 80px;
-        max-width: 150px;
-    }
-    th:nth-child(9), td:nth-child(9) { /* Xóa */
-        min-width: 40px;
     }
     .toggle-container {
         width: 100%;
