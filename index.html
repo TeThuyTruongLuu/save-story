@@ -6,13 +6,16 @@
 	<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet" />
     <title>Quản lý Truyện</title>
     <link rel="stylesheet" href="style.css">
-	<script type="module" src="script.js"></script>
+	<script type="module" src="firebase.js"></script>
+	<script type="module" src="storage.js"></script>
+	<script type="module" src="crawler.js"></script>
+	<script type="module" src="main.js"></script>
 </head>
 <body>
     <div class="container">
         <h2>Quản lý Truyện</h2>
         <div class="toggle-container">
-            <button id="btn-upload" class="toggle-btn active" onclick="toggleSection('upload')">Tải truyện mới</button>
+            <button id="btn-upload" class="toggle-btn active" onclick="toggleSection('upload')">Lưu truyện</button>
             <button id="btn-search" class="toggle-btn" onclick="toggleSection('search')">Tìm truyện</button>
             <button id="btn-epub" class="toggle-btn" onclick="toggleSection('epub')">Tải EPUB</button>
         </div>
@@ -20,7 +23,7 @@
         <div id="upload" class="section active">
             <div class="flex-row">
                 <label>Nhập link truyện: <input type="text" id="storyLink"></label>
-                <button onclick="fetchStory()">Lưu Truyện</button>
+                <button id="saveStory">Lưu Truyện</button>
             </div>
             <div class="flex-row">
                 <label>Tag bổ sung:
