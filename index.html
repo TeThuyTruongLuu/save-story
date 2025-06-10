@@ -38,11 +38,42 @@
         </div>
 
         <div id="epub" class="section">
-            <h3>Tải Truyện EPUB</h3>
-            <input type="text" id="epubUrl" placeholder="Dán link truyện vô đây nha">
-            <textarea id="extra_content" placeholder="Ghi chú chương..."></textarea>
-            <button style ="margin-bottom:10px;" onclick="handleEpubDownload()">Tải EPUB</button>
-            <textarea id="log" rows="10" cols="50" readonly></textarea>
+            <div class="input-container">
+                <div class="flex-row">
+                    <label>Nhập link: <textarea id="epubUrl" rows="4"></textarea></label>
+                </div>
+                <div class="flex-row">
+                    <label>Loại link: 
+                        <select id="urlType">
+                            <option value="ao3_tag">AO3 Tag</option>
+                            <option value="lofter_author">Lofter Author</option>
+                            <option value="lofter_tag">Lofter Tag</option>
+                            <option value="forum">Forum</option>
+                        </select>
+                    </label>
+                    <label>Định dạng: 
+                        <select id="outputFormat">
+                            <option value="epub">EPUB</option>
+                            <option value="pdf">PDF</option>
+                            <option value="docx">Word</option>
+                            <option value="rar">RAR</option>
+                        </select>
+                    </label>
+                    <button onclick="window.fetchChapters()">Lấy danh sách</button>
+                </div>
+                <div id="chapterList" class="table-container">
+                    <table id="chapterTable">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAllChapters" onclick="window.toggleSelectAll()"></th>
+                                <th>Tiêu đề</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <button onclick="window.downloadSelected()">Tải</button>
+            </div>
         </div>
 
         <div id="search" class="section">

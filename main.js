@@ -17,7 +17,7 @@ export async function toggleSection(section) {
 	document.querySelectorAll('.table-section').forEach(t => t.classList.add('hidden'));
 	if (section === 'epub') {
 		document.getElementById('downloaded-stories').classList.remove('hidden');
-		loadDownloadedStories();
+		storage.loadDownloadedStories();
 	} else {
 		document.getElementById('saved-stories').classList.remove('hidden');
 	}
@@ -241,6 +241,102 @@ export async function randomStory() {
 }
 
 
+export async function fetchChapters() {
+    const url = document.getElementById("epubUrl").value.trim();
+    const urlType = document.getElementById("urlType").value;
+    if (!url) {
+        alert("Vui lòng nhập link!");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://localhost:5000/fetch-chapters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url, type: urlType })
+        });
+        const chapters = await response.json();
+        if (chapters.error) {
+            alert(chapters.error);
+            return;
+        }
+
+        const chapterTable = document.getElementById("chapterTable").getElementsByTagName("tbody")[0];
+        chapterTable.innerHTML = "";
+        chapters.forEach((chapter, index) => {
+            const row = `
+                <tr>
+                    <td><input type="checkbox" class="chapter-select" data-url="${chapter.url}"></td>
+                    <td>${chapter.title}</td>
+                </tr>
+            `;
+            chapterTable.innerHTML += row;
+        });
+    } catch (error) {
+        console.error("Error fetching chapters:", error);
+        alert("Không thể lấy danh sách chương!");
+    }
+}
+
+export async function toggleSelectAll() {
+    const selectAll = document.getElementById("selectAllChapters");
+    const checkboxes = document.querySelectorAll(".chapter-select");
+    checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
+}
+
+export async function downloadSelected() {
+    const checkboxes = document.querySelectorAll(".chapter-select:checked");
+    const urls = Array.from(checkboxes).map(cb => cb.dataset.url);
+    const outputFormat = document.getElementById("outputFormat").value;
+
+    if (urls.length === 0) {
+        alert("Vui lòng chọn ít nhất một chương!");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://localhost:5000/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls, format: outputFormat })
+        });
+        if (!response.ok) {
+            throw new Error("Lỗi khi tải file!");
+        }
+        const blob = await response.blob();
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = "downloaded_file";
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename="(.+)"/);
+            if (match) filename = match[1];
+        }
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+
+        // Update downloaded stories table
+        const story = {
+            title: filename.split('.')[0],
+            url: urls[0],
+            defaultTag: "Downloaded",
+            author: "Unknown",
+            editor: "Unknown",
+            status: "Hoàn",
+            review: {}
+        };
+        storage.saveStoryToFirestore(story, "downloaded_stories");
+        storage.saveStoryToIndexedDB(story, "downloaded_stories");
+        storage.loadDownloadedStories();
+    } catch (error) {
+        console.error("Error downloading:", error);
+        alert("Không thể tải file!");
+    }
+}
+
+
 document.getElementById("additionalTags").addEventListener("input", async function(event) {
 	let input = event.target;
 	let value = input.value.trim();
@@ -339,8 +435,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+
 window.toggleSection = toggleSection;
 window.renderStories = renderStories;
 window.suggestTags = suggestTags;
 window.filterStories = filterStories;
 window.randomStory = randomStory;
+window.fetchChapters = fetchChapters;
+window.toggleSelectAll = toggleSelectAll;
+window.downloadSelected = downloadSelected;

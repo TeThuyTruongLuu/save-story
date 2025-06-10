@@ -362,8 +362,8 @@ export async function updateReview(storyUrl, reviewText, collectionName = "stori
 }
 
 
-
 window.fetchStory = fetchStory;
 window.deleteStory = deleteStory;
 window.saveStory = saveStory;
 window.updateReview = updateReview;
+window.loadDownloadedStories = loadDownloadedStories
