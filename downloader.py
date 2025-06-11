@@ -88,8 +88,21 @@ def fetch_forum_chapters(url, driver):
     driver.get(url)
     soup = BeautifulSoup(driver.page_source, "html.parser")
     chapters = []
-    for link in soup.select("a.chapter-link"):
-        chapters.append({"title": link.text.strip(), "url": link["href"]})
+    # Mỗi post là 1 "chapter"
+    for idx, article in enumerate(soup.select("article.message")):
+        content_div = article.select_one("div.bbWrapper")
+        user_link = article.select_one("h4.message-name a.username")
+        
+        if content_div and user_link:
+            username = user_link.text.strip()
+            content_text = content_div.get_text(strip=True)
+            preview = content_text[:20] + "..." if len(content_text) > 20 else content_text
+            title = f"{username}: {preview}"
+            
+            chapters.append({
+                "title": title,
+                "url": url  # hoặc url + f"#post-{idx+1}" nếu muốn
+            })
     return chapters
 
 def download_content(url, driver):
@@ -208,5 +221,17 @@ def download():
         driver.quit()
         cleanup_temp()
 
+from flask import send_from_directory
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('.', path)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
+    

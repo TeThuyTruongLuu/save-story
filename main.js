@@ -1,7 +1,6 @@
 // main.js - giao diện chính
 import * as storage from './storage.js';
 import { autoFillLofterLinks } from './crawler.js';
-import { fetchChapterList } from './crawler.js';
 
 import { db } from './firebase.js';
 import { collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
@@ -284,7 +283,16 @@ export async function fetchChapters() {
     }
 
     try {
-        const chapters = await fetchChapterList(url, urlType);
+        const response = await fetch("http://localhost:5000/fetch-chapters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url, type: urlType })
+        });
+        const chapters = await response.json();
+        if (chapters.error) {
+            alert(chapters.error);
+            return;
+        }
         if (chapters.length === 0) {
             alert("Không tìm thấy chương hoặc bài viết!");
             return;
