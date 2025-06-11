@@ -87,23 +87,30 @@ def fetch_lofter_posts(url, driver, is_tag=False):
 def fetch_forum_chapters(url, driver):
     driver.get(url)
     soup = BeautifulSoup(driver.page_source, "html.parser")
+
+    # Lấy tiêu đề chính của trang
+    main_title = soup.select_one("h1.p-title-value").text.strip() if soup.select_one("h1.p-title-value") else "Forum Thread"
+
     chapters = []
-    # Mỗi post là 1 "chapter"
     for idx, article in enumerate(soup.select("article.message")):
         content_div = article.select_one("div.bbWrapper")
         user_link = article.select_one("h4.message-name a.username")
         
         if content_div and user_link:
             username = user_link.text.strip()
-            content_text = content_div.get_text(strip=True)
+            content_html = content_div.decode_contents()
+            content_text = BeautifulSoup(content_html, "html.parser").get_text(separator=" ", strip=True)
+
             preview = content_text[:20] + "..." if len(content_text) > 20 else content_text
             title = f"{username}: {preview}"
-            
+
             chapters.append({
-                "title": title,
-                "url": url  # hoặc url + f"#post-{idx+1}" nếu muốn
+                "title": title,           # plain text
+                "content": content_html   # full HTML
             })
-    return chapters
+
+    
+    return {"main_title": main_title, "chapters": chapters}
 
 def download_content(url, driver):
     driver.get(url)
@@ -131,15 +138,24 @@ def download_content(url, driver):
             content["images"][i] = None
     return content
 
-def create_html(content, title):
-    html = f"<h1>{title}</h1><p>{content['text']}</p>"
-    for img in content["images"]:
-        if img:
-            html += f'<img src="{img}">'
+def create_html(chapters, main_title):
+    html = f"<h1>{main_title}</h1><ul>"
+    # Mục lục
+    for idx, chapter in enumerate(chapters):
+        html += f'<li><a href="#chapter{idx+1}">{chapter["title"]}</a></li>'
+    html += "</ul>"
+
+    # Nội dung
+    for idx, chapter in enumerate(chapters):
+        html += f'<h2 id="chapter{idx+1}">{chapter["title"]}</h2>'
+        html += f'<div>{chapter["content"]}</div>'
+    
     os.makedirs("temp", exist_ok=True)
-    with open(f"temp/{title}.html", "w", encoding="utf-8") as f:
+    html_file = f"temp/{main_title}.html"
+    with open(html_file, "w", encoding="utf-8") as f:
         f.write(html)
-    return f"temp/{title}.html"
+    return html_file
+
 
 def convert_to_format(html_file, output_format, output_name):
     output_path = f"temp/{output_name}.{output_format}"
@@ -166,6 +182,25 @@ def cleanup_temp():
 def health_check():
     return jsonify({"status": "Server is running"})
 
+import unicodedata
+import re
+
+def remove_vietnamese_tones(s):
+    s = unicodedata.normalize("NFD", s)
+    s = s.encode("ascii", "ignore").decode("utf-8")
+    s = s.replace('đ', 'd').replace('Đ', 'D')
+    return s
+
+def sanitize_filename(filename):
+    filename = remove_vietnamese_tones(filename)
+    filename = re.sub(r'[^A-Za-z0-9 ]', '', filename)
+    filename = re.sub(r'\s+', '_', filename)
+    filename = filename.strip('_')
+    return filename
+
+
+
+
 @app.route("/fetch-chapters", methods=["POST"])
 def fetch_chapters():
     data = request.json
@@ -176,37 +211,63 @@ def fetch_chapters():
     try:
         if url_type == "ao3_tag":
             items = fetch_ao3_works(url, driver)
+            return jsonify(items)
         elif url_type in ["lofter_author", "lofter_tag"]:
             items = fetch_lofter_posts(url, driver, url_type == "lofter_tag")
+            return jsonify(items)
         elif url_type == "forum":
-            items = fetch_forum_chapters(url, driver)
+            result = fetch_forum_chapters(url, driver)
+            return jsonify(result)
         else:
             return jsonify({"error": "Invalid URL type"}), 400
     finally:
         driver.quit()
-    
-    return jsonify(items)
+
 
 @app.route("/download", methods=["POST"])
 def download():
     data = request.json
-    urls = data.get("urls")
-    output_format = data.get("format")
     driver = setup_selenium()
-    
+
     try:
+        if data.get("type") == "forum":
+            main_title = data.get("main_title", "Forum Thread")
+            chapters = data.get("chapters", [])
+            output_format = data.get("format")
+
+            html_file = create_html(chapters, main_title)
+            safe_main_title = sanitize_filename(main_title)
+            html_file = create_html(chapters, safe_main_title)
+            output_file = convert_to_format(html_file, output_format, safe_main_title)
+
+            with open(output_file, "rb") as f:
+                file_data = f.read()
+            file_name = os.path.basename(output_file)
+            cleanup_temp()
+            return send_file(
+                io.BytesIO(file_data),
+                as_attachment=True,
+                download_name=file_name,
+                mimetype=f"application/{output_format}"
+            )
+
+        # Còn lại: url list (ao3/lofter)
+        urls = data.get("urls")
+        output_format = data.get("format")
+
         if any("lofter.com" in url for url in urls):
             load_lofter_cookies(driver)
-        
+
         files = []
         for url in urls:
             content = download_content(url, driver)
             title = re.sub(r'[^\w\s]', '', urlparse(url).path).replace('/', '_')
-            html_file = create_html(content, title)
-            output_file = convert_to_format(html_file, output_format, title)
+            html_file = create_html([{"title": title, "content": content["text"]}], title)
+            safe_title = sanitize_filename(title)
+            html_file = create_html([{"title": safe_title, "content": content["text"]}], safe_title)
+            output_file = convert_to_format(html_file, output_format, safe_title)
             files.append(output_file)
-        
-        # Send the first file as a response (for simplicity, can extend to send multiple)
+
         with open(files[0], "rb") as f:
             file_data = f.read()
         file_name = os.path.basename(files[0])
@@ -220,6 +281,7 @@ def download():
     finally:
         driver.quit()
         cleanup_temp()
+
 
 from flask import send_from_directory
 

@@ -1,6 +1,6 @@
-// main.js - giao diện chính
 import * as storage from './storage.js';
 import { autoFillLofterLinks } from './crawler.js';
+import { removeVietnameseTones } from './storage.js';
 
 import { db } from './firebase.js';
 import { collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
@@ -8,35 +8,34 @@ import { collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc } fro
 const dbName = "StoryDB";
 let idb;
 
-import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.es.min.js";
-import EPUB from "https://cdn.jsdelivr.net/npm/epub-gen@0.1.0/lib/index.js";
-import { Packer } from "https://cdn.jsdelivr.net/npm/docx@7.8.0/build/index.js";
-import JSZip from "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
 
 async function generateFile(content, title, format) {
     if (format === "pdf") {
-        const doc = new jsPDF();
+        const doc = new window.jspdf.jsPDF();
         doc.text(content.text, 10, 10);
         content.images.forEach((img, i) => {
             if (img) doc.addImage(img, "JPEG", 10, 20 + i * 100, 180, 100);
         });
         doc.save(`${title}.pdf`);
-    } else if (format === "epub") {
-        const book = new EPUB({
-            title,
-            content: [{ title, data: `<p>${content.text}</p>${content.images.map(img => `<img src="${img}">`).join("")}` }]
+    } 
+    else if (format === "docx") {
+        const doc = new window.docx.Document({
+            sections: [{
+                children: [
+                    new window.docx.Paragraph(content.text)
+                ]
+            }]
         });
-        await book.genEpub();
-    } else if (format === "docx") {
-        const doc = new docx.Document({
-            sections: [{ children: [new docx.Paragraph(content.text)] }]
-        });
-        const blob = await Packer.toBlob(doc);
+        const blob = await window.docx.Packer.toBlob(doc);
         saveAs(blob, `${title}.docx`);
     } else if (format === "rar") {
-        const zip = new JSZip();
+        const zip = new window.JSZip();
         zip.file(`${title}.html`, `<h1>${title}</h1><p>${content.text}</p>${content.images.map(img => `<img src="${img}">`).join("")}`);
-        content.images.forEach((img, i) => zip.file(`image_${i}.jpg`, img.split(",")[1], { base64: true }));
+        content.images.forEach((img, i) => {
+            if (img && img.startsWith("data:image/")) {
+                zip.file(`image_${i}.jpg`, img.split(",")[1], { base64: true });
+            }
+        });
         const blob = await zip.generateAsync({ type: "blob" });
         saveAs(blob, `${title}.zip`);
     }
@@ -288,22 +287,29 @@ export async function fetchChapters() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url, type: urlType })
         });
-        const chapters = await response.json();
-        if (chapters.error) {
-            alert(chapters.error);
+
+        const data = await response.json();
+
+        if (data.error) {
+            alert(data.error);
             return;
         }
-        if (chapters.length === 0) {
+
+        // Lưu main_title và chapters vào global
+        window.currentForumTitle = data.main_title || "";
+        window.currentChapters = Array.isArray(data) ? data : (data && Array.isArray(data.chapters)) ? data.chapters : [];
+
+        if (!window.currentChapters || window.currentChapters.length === 0) {
             alert("Không tìm thấy chương hoặc bài viết!");
             return;
         }
 
         const chapterTable = document.getElementById("chapterTable").getElementsByTagName("tbody")[0];
         chapterTable.innerHTML = "";
-        chapters.forEach((chapter, index) => {
+        window.currentChapters.forEach((chapter, index) => {
             const row = `
                 <tr>
-                    <td><input type="checkbox" class="chapter-select" data-url="${chapter.url}"></td>
+                    <td><input type="checkbox" class="chapter-select" data-url="${chapter.url || ''}" data-title="${chapter.title}" data-content-index="${index}"></td>
                     <td>${chapter.title}</td>
                 </tr>
             `;
@@ -315,6 +321,8 @@ export async function fetchChapters() {
     }
 }
 
+
+
 export async function toggleSelectAll() {
     const selectAll = document.getElementById("selectAllChapters");
     const checkboxes = document.querySelectorAll(".chapter-select");
@@ -323,30 +331,59 @@ export async function toggleSelectAll() {
 
 export async function downloadSelected() {
     const checkboxes = document.querySelectorAll(".chapter-select:checked");
-    const urls = Array.from(checkboxes).map(cb => cb.dataset.url);
     const outputFormat = document.getElementById("outputFormat").value;
+    const urlType = document.getElementById("urlType").value;
 
-    if (urls.length === 0) {
+    if (checkboxes.length === 0) {
         alert("Vui lòng chọn ít nhất một chương!");
         return;
+    }
+
+    let bodyData = { format: outputFormat };
+    if (urlType === "forum") {
+        if (!window.currentChapters) {
+            alert("Danh sách chương không tồn tại!");
+            return;
+        }
+        // Lấy data content các chương đã chọn
+        const chapters = Array.from(checkboxes).map(cb => {
+            const idx = parseInt(cb.dataset.contentIndex, 10);
+            return window.currentChapters[idx];
+        });
+
+        bodyData = {
+            type: "forum",
+            main_title: window.currentForumTitle || "Forum Thread",
+            chapters,
+            format: outputFormat
+        };
+    } else {
+        const urls = Array.from(checkboxes).map(cb => cb.dataset.url);
+        bodyData = { urls, format: outputFormat };
     }
 
     try {
         const response = await fetch("http://localhost:5000/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ urls, format: outputFormat })
+            body: JSON.stringify(bodyData)
         });
+
         if (!response.ok) {
             throw new Error("Lỗi khi tải file!");
         }
+
         const blob = await response.blob();
         const contentDisposition = response.headers.get("Content-Disposition");
-        let filename = "downloaded_file";
+        let filename = "downloaded_file.epub"; // fallback an toàn
+
         if (contentDisposition) {
             const match = contentDisposition.match(/filename="(.+)"/);
             if (match) filename = match[1];
         }
+
+        console.log("Final filename:", filename);
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -354,10 +391,12 @@ export async function downloadSelected() {
         a.click();
         window.URL.revokeObjectURL(url);
 
+        const rawTitle = filename.split('.')[0];
+        const cleanTitle = removeVietnameseTones(rawTitle);
         // Update downloaded stories table
         const story = {
             title: filename.split('.')[0],
-            url: urls[0],
+            url: document.getElementById("epubUrl").value.trim(),
             defaultTag: "Downloaded",
             author: "Unknown",
             editor: "Unknown",
@@ -456,11 +495,6 @@ document.addEventListener("click", function(event) {
 	}
 });
 
-document.addEventListener("DOMContentLoaded", async () => {
-  await storage.loadStories();
-  await storage.loadAllTags();
-  await populateSelectOptions();
-});
 
 document.addEventListener("DOMContentLoaded", async () => {
   await storage.loadStories();
@@ -471,6 +505,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchStory();
   });
 });
+
+
 
 window.openLofterLogin = () => {
     const loginWindow = window.open("https://www.lofter.com", "_blank");
