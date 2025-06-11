@@ -121,8 +121,15 @@ def download_content(url, driver):
         content["text"] = soup.select_one("div#chapters").text.strip() if soup.select_one("div#chapters") else ""
         content["images"] = [img["src"] for img in soup.select("div#chapters img")]
     elif "lofter.com" in url:
-        content["text"] = soup.select_one("div.txt").text.strip() if soup.select_one("div.txt") else ""
-        content["images"] = [img["src"] for img in soup.select("img")]
+        # Thử kiểu cũ
+        content_div = soup.select_one("div.txt")
+        # Nếu không có, thử kiểu mới
+        if not content_div:
+            content_div = soup.select_one("div.post-content div.m-post")
+        
+        content["text"] = content_div.text.strip() if content_div else ""
+        content["images"] = [img["src"] for img in (content_div or soup).select("img")]
+
     elif "toanchuccaothu.com" in url:
         content["text"] = soup.select_one("div.chapter-content").text.strip() if soup.select_one("div.chapter-content") else ""
         content["images"] = [img["src"] for img in soup.select("div.chapter-content img")]
