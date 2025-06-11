@@ -298,24 +298,48 @@ def download_content(url, driver):
 
     time.sleep(2)
     soup = BeautifulSoup(driver.page_source, "html.parser")
-
+    
     domain = urlparse(url).netloc
-    selector_set = {
-        "content": [
-            "div.txt",
-            "div.content",
-            "div.text",
-            "div.post-content",
-            "div.g-ctc",
-            "div.entry-content",
-            "div.wrap + div.txt",
-            "div.wrap + div.content",
-            "div.wrap + div.text",
-            "div.wrap",  # fallback cuối cùng
-        ],
-        "images": ["img"],
-        "title": ["h1", "h2", "div.ttl", "div.title"]
-    }
+    is_lofter_post = "lofter.com" in domain
+
+    if is_lofter_post:
+        selector_set = {
+            "content": [
+                "div.post-content",
+                "article.post div.content",
+                "div.g-ctc",
+                "div.entry-content",
+            ],
+            "images": [
+                "div.post-content img",
+                "article.post img",
+                "div.g-ctc img",
+                "div.entry-content img"
+            ],
+            "title": [
+                "h1.post-title",
+                "div.ttl",
+                "div.title",
+                "h1"
+            ]
+        }
+    else:
+        selector_set = {
+            "content": [
+                "div.txt",
+                "div.content",
+                "div.text",
+                "div.post-content",
+                "div.g-ctc",
+                "div.entry-content",
+                "div.wrap + div.txt",
+                "div.wrap + div.content",
+                "div.wrap + div.text",
+                "div.wrap",
+            ],
+            "images": ["img"],
+            "title": ["h1", "h2", "div.ttl", "div.title"]
+        }
 
 
     parsed = parse_by_selector(soup, selector_set)
