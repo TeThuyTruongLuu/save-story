@@ -36,6 +36,18 @@ if (!window.indexedDB && !window.mozIndexedDB && !window.webkitIndexedDB && !win
   };
 }
 
+request.onupgradeneeded = function(event) {
+    idb = event.target.result;
+    if (!idb.objectStoreNames.contains("stories")) {
+        idb.createObjectStore("stories", { keyPath: "url" });
+    }
+    if (!idb.objectStoreNames.contains("downloaded_stories")) {
+        idb.createObjectStore("downloaded_stories", { keyPath: "url" });
+    }
+    if (!idb.objectStoreNames.contains("cookies")) {
+        idb.createObjectStore("cookies", { keyPath: "id" });
+    }
+};
 
 export async function fetchStory() {
 	let inputField = document.getElementById("storyLink");

@@ -1,12 +1,47 @@
 // main.js - giao diện chính
 import * as storage from './storage.js';
 import { autoFillLofterLinks } from './crawler.js';
+import { fetchChapterList } from './crawler.js';
 
 import { db } from './firebase.js';
 import { collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
 const dbName = "StoryDB";
 let idb;
+
+import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.es.min.js";
+import EPUB from "https://cdn.jsdelivr.net/npm/epub-gen@0.1.0/lib/index.js";
+import { Packer } from "https://cdn.jsdelivr.net/npm/docx@7.8.0/build/index.js";
+import JSZip from "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+
+async function generateFile(content, title, format) {
+    if (format === "pdf") {
+        const doc = new jsPDF();
+        doc.text(content.text, 10, 10);
+        content.images.forEach((img, i) => {
+            if (img) doc.addImage(img, "JPEG", 10, 20 + i * 100, 180, 100);
+        });
+        doc.save(`${title}.pdf`);
+    } else if (format === "epub") {
+        const book = new EPUB({
+            title,
+            content: [{ title, data: `<p>${content.text}</p>${content.images.map(img => `<img src="${img}">`).join("")}` }]
+        });
+        await book.genEpub();
+    } else if (format === "docx") {
+        const doc = new docx.Document({
+            sections: [{ children: [new docx.Paragraph(content.text)] }]
+        });
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `${title}.docx`);
+    } else if (format === "rar") {
+        const zip = new JSZip();
+        zip.file(`${title}.html`, `<h1>${title}</h1><p>${content.text}</p>${content.images.map(img => `<img src="${img}">`).join("")}`);
+        content.images.forEach((img, i) => zip.file(`image_${i}.jpg`, img.split(",")[1], { base64: true }));
+        const blob = await zip.generateAsync({ type: "blob" });
+        saveAs(blob, `${title}.zip`);
+    }
+}
 
 export async function toggleSection(section) {
 	document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -240,7 +275,6 @@ export async function randomStory() {
 	}
 }
 
-
 export async function fetchChapters() {
     const url = document.getElementById("epubUrl").value.trim();
     const urlType = document.getElementById("urlType").value;
@@ -250,14 +284,9 @@ export async function fetchChapters() {
     }
 
     try {
-        const response = await fetch("http://localhost:5000/fetch-chapters", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url, type: urlType })
-        });
-        const chapters = await response.json();
-        if (chapters.error) {
-            alert(chapters.error);
+        const chapters = await fetchChapterList(url, urlType);
+        if (chapters.length === 0) {
+            alert("Không tìm thấy chương hoặc bài viết!");
             return;
         }
 
@@ -435,6 +464,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+window.openLofterLogin = () => {
+    const loginWindow = window.open("https://www.lofter.com", "_blank");
+    loginWindow.addEventListener("load", async () => {
+        const cookies = await loginWindow.document.cookie.split(";").map(c => {
+            const [name, value] = c.trim().split("=");
+            return { name, value, domain: ".lofter.com", path: "/" };
+        });
+        await saveLofterCookies(cookies);
+        loginWindow.close();
+    });
+};
 
 window.toggleSection = toggleSection;
 window.renderStories = renderStories;
