@@ -66,10 +66,13 @@ def fetch_ao3_works(url, driver):
 
 def fetch_lofter_posts(url, driver, is_tag=False):
     driver.get(url)
-    load_lofter_cookies(driver)
-    driver.get(url)  # Reload with cookies
+    if not load_lofter_cookies(driver):
+        return []
+    driver.get(url)  # Tải lại trang với cookie
     posts = []
     last_height = driver.execute_script("return document.body.scrollHeight")
+    
+    # Cuộn trang để tải toàn bộ bài viết
     while True:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(2)
@@ -77,11 +80,36 @@ def fetch_lofter_posts(url, driver, is_tag=False):
         if new_height == last_height:
             break
         last_height = new_height
+    
     soup = BeautifulSoup(driver.page_source, "html.parser")
-    for post in soup.select("a[href*='.lofter.com/post/']"):
-        post_url = post["href"]
-        if post_url not in [p["url"] for p in posts]:
-            posts.append({"title": post.text.strip() or "Untitled", "url": post_url})
+    
+    # Lấy tất cả bài viết
+    for post in soup.select("div.m-post"):
+        post_url = post.select_one("a[href*='.lofter.com/post/']")["href"] if post.select_one("a[href*='.lofter.com/post/']") else ""
+        title = post.select_one("div.ctc .ttl") or post.select_one("h2") or post.select_one("div.text")
+        title = title.text.strip() if title else "Untitled"
+        
+        # Lấy nội dung văn bản
+        content_div = post.select_one("div.txt") or post.select_one("div.post-content div.m-post") or post.select_one("div.ctc")
+        content_text = content_div.text.strip() if content_div else ""
+        
+        # Lấy danh sách hình ảnh
+        images = [img["src"] for img in post.select("img") if "src" in img.attrs]
+        
+        if post_url and post_url not in [p["url"] for p in posts]:
+            posts.append({
+                "title": title,
+                "url": post_url,
+                "content": content_text,
+                "images": images
+            })
+    
+    # Xử lý trang tiếp theo
+    next_link = soup.select_one("a.next")
+    if next_link and is_tag:
+        next_url = urljoin(url, next_link["href"])
+        posts.extend(fetch_lofter_posts(next_url, driver, is_tag))
+    
     return posts
 
 def fetch_forum_chapters(url, driver):
@@ -114,51 +142,73 @@ def fetch_forum_chapters(url, driver):
 
 def download_content(url, driver):
     driver.get(url)
+    load_lofter_cookies(driver)  # Đảm bảo cookie được áp dụng
+    driver.get(url)  # Tải lại trang với cookie
+    time.sleep(2)  # Đợi trang tải hoàn toàn
     soup = BeautifulSoup(driver.page_source, "html.parser")
+    
     content = {"text": "", "images": []}
     
-    if "archiveofourown.org" in url:
-        content["text"] = soup.select_one("div#chapters").text.strip() if soup.select_one("div#chapters") else ""
-        content["images"] = [img["src"] for img in soup.select("div#chapters img")]
-    elif "lofter.com" in url:
-        # Thử kiểu cũ
-        content_div = soup.select_one("div.txt")
-        # Nếu không có, thử kiểu mới
-        if not content_div:
-            content_div = soup.select_one("div.post-content div.m-post")
-        
-        content["text"] = content_div.text.strip() if content_div else ""
-        content["images"] = [img["src"] for img in (content_div or soup).select("img")]
-
-    elif "toanchuccaothu.com" in url:
-        content["text"] = soup.select_one("div.chapter-content").text.strip() if soup.select_one("div.chapter-content") else ""
-        content["images"] = [img["src"] for img in soup.select("div.chapter-content img")]
+    # Thử các thẻ HTML khác nhau để lấy nội dung
+    content_div = (
+        soup.select_one("div.txt") or
+        soup.select_one("div.post-content div.m-post") or
+        soup.select_one("div.ctc") or
+        soup.select_one("div.m-post .ctc")
+    )
     
-    # Download images
+    content["text"] = content_div.decode_contents().strip() if content_div else "Không tìm thấy nội dung"
+    content["images"] = [img["src"] for img in soup.select("div.m-post img") if "src" in img.attrs]
+    
+    # Tải hình ảnh
     for i, img_url in enumerate(content["images"]):
         try:
-            response = requests.get(img_url)
-            with open(f"temp/image_{i}.jpg", "wb") as f:
+            img_url = urljoin(url, img_url)  # Chuyển URL tương đối thành tuyệt đối
+            response = requests.get(img_url, stream=True)
+            response.raise_for_status()
+            os.makedirs("temp", exist_ok=True)
+            img_path = f"temp/image_{i}.jpg"
+            with open(img_path, "wb") as f:
                 f.write(response.content)
-            content["images"][i] = f"temp/image_{i}.jpg"
-        except:
+            content["images"][i] = img_path
+        except Exception as e:
+            print(f"Không thể tải hình ảnh {img_url}: {e}")
             content["images"][i] = None
+    
     return content
 
 def create_html(chapters, main_title):
-    html = f"<h1>{main_title}</h1><ul>"
+    html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>{main_title}</title>
+    </head>
+    <body>
+        <h1>{main_title}</h1>
+        <ul>
+    """
     # Mục lục
     for idx, chapter in enumerate(chapters):
         html += f'<li><a href="#chapter{idx+1}">{chapter["title"]}</a></li>'
+    
     html += "</ul>"
-
+    
     # Nội dung
     for idx, chapter in enumerate(chapters):
         html += f'<h2 id="chapter{idx+1}">{chapter["title"]}</h2>'
         html += f'<div>{chapter["content"]}</div>'
+        # Thêm hình ảnh
+        if "images" in chapter:
+            for img in chapter["images"]:
+                if img:
+                    html += f'<img src="{img}" alt="Image" style="max-width:100%;"><br>'
+    
+    html += "</body></html>"
     
     os.makedirs("temp", exist_ok=True)
-    html_file = f"temp/{main_title}.html"
+    safe_main_title = sanitize_filename(main_title)
+    html_file = f"temp/{safe_main_title}.html"
     with open(html_file, "w", encoding="utf-8") as f:
         f.write(html)
     return html_file
@@ -235,18 +285,16 @@ def fetch_chapters():
 def download():
     data = request.json
     driver = setup_selenium()
-
+    
     try:
         if data.get("type") == "forum":
             main_title = data.get("main_title", "Forum Thread")
             chapters = data.get("chapters", [])
             output_format = data.get("format")
-
-            html_file = create_html(chapters, main_title)
             safe_main_title = sanitize_filename(main_title)
             html_file = create_html(chapters, safe_main_title)
             output_file = convert_to_format(html_file, output_format, safe_main_title)
-
+            
             with open(output_file, "rb") as f:
                 file_data = f.read()
             file_name = os.path.basename(output_file)
@@ -257,27 +305,32 @@ def download():
                 download_name=file_name,
                 mimetype=f"application/{output_format}"
             )
-
-        # Còn lại: url list (ao3/lofter)
+        
+        # Xử lý Lofter/AO3
         urls = data.get("urls")
         output_format = data.get("format")
-
+        
         if any("lofter.com" in url for url in urls):
             load_lofter_cookies(driver)
-
-        files = []
+        
+        chapters = []
         for url in urls:
-            content = download_content(url, driver)
-            title = re.sub(r'[^\w\s]', '', urlparse(url).path).replace('/', '_')
-            html_file = create_html([{"title": title, "content": content["text"]}], title)
-            safe_title = sanitize_filename(title)
-            html_file = create_html([{"title": safe_title, "content": content["text"]}], safe_title)
-            output_file = convert_to_format(html_file, output_format, safe_title)
-            files.append(output_file)
-
-        with open(files[0], "rb") as f:
+            content = download_content(url, driver) if "lofter.com" in url else fetch_lofter_posts(url, driver)[0]
+            title = content.get("title", re.sub(r'[^\w\s]', '', urlparse(url).path).replace('/', '_'))
+            chapters.append({
+                "title": title,
+                "content": content["text"],
+                "images": content["images"]
+            })
+        
+        main_title = chapters[0]["title"] if chapters else "Lofter Posts"
+        safe_main_title = sanitize_filename(main_title)
+        html_file = create_html(chapters, safe_main_title)
+        output_file = convert_to_format(html_file, output_format, safe_main_title)
+        
+        with open(output_file, "rb") as f:
             file_data = f.read()
-        file_name = os.path.basename(files[0])
+        file_name = os.path.basename(output_file)
         cleanup_temp()
         return send_file(
             io.BytesIO(file_data),
