@@ -225,10 +225,12 @@ th {
     color: white;
 }
 .hidden { display: none; }
-#epub input, #epub textarea, #epub button {
-    max-width: 95%;
+#epub input, #epub button {
+    max-width: 100%;
     display: block;
 }
+#epub textarea {max-width: 95%;}
+
 #chapterTable {
     margin-top: 20px;
 }
@@ -237,6 +239,9 @@ th {
 }
 #chapterTable th:nth-child(2), #chapterTable td:nth-child(2) {
     width: 95%;
+}
+#epub .flex-row label, #epub .flex-row button {
+    flex: 1;
 }
 
 @media (max-width: 800px) {
