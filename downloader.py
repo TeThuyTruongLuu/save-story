@@ -102,116 +102,40 @@ def save_lofter_cookies(driver, cookie_file="lofter_cookies.json"):
         json.dump(driver.get_cookies(), f)
     print("Saved Lofter cookies.")
 
-# def parse_by_selector(post_elem, selector_set, index_in_list=0):
-    # result = {}
-    
-    # for sel in selector_set.get("content", []):
-        # elem = post_elem.select_one(sel)
-        # if elem:
-            # for span in elem.select("span.picNum"):
-                # span.decompose()
-
-            # result["content"] = elem.decode_contents().strip()
-            # result["content_text"] = elem.get_text(separator=" ", strip=True)
-            # break
-
-    # if "content" not in result:
-        # result["content"] = "Không tìm thấy nội dung"
-        # result["content_text"] = "Không tìm thấy nội dung"
-    
-    # import html
-
-    # result["images"] = []
-    # for sel in selector_set.get("images", []):
-        # imgs = post_elem.select(sel)
-        # if imgs:
-            # result["images"] = [
-                # html.unescape(img["src"]) if img["src"].startswith("http") else "https:" + html.unescape(img["src"])
-                # for img in imgs if "src" in img.attrs
-            # ]
-            # break
-
-    # for sel in selector_set.get("title", []):
-        # elem = post_elem.select_one(sel)
-        # if elem and elem.text.strip():
-            # result["title"] = elem.text.strip()
-            # break
-    # if "title" not in result or not result["title"].strip():
-        # first_img = post_elem.select_one("img")
-        # if first_img and first_img.get("alt"):
-            # result["title"] = first_img["alt"].strip()
-        # elif result.get("content_text", "").strip():
-            # result["title"] = result["content_text"][:40].strip()
-        # else:
-            # result["title"] = f"Bài số {index_in_list}"
-    
-    # return result
-
 def parse_by_selector(post_elem, selector_set, index_in_list=0):
     result = {}
-
-    # Parse content
+    
     for sel in selector_set.get("content", []):
-        elems = post_elem.select(sel)
-        for elem in elems:
-            # Skip nếu ancestor có class m-post-about
-            skip = False
-            for parent in elem.parents:
-                if parent.has_attr("class") and "m-post-about" in parent["class"]:
-                    skip = True
-                    break
-            if skip:
-                continue
-
-            # Clean picNum nếu có
+        elem = post_elem.select_one(sel)
+        if elem:
             for span in elem.select("span.picNum"):
                 span.decompose()
 
             result["content"] = elem.decode_contents().strip()
             result["content_text"] = elem.get_text(separator=" ", strip=True)
-            break  # lấy đúng 1 content là đủ
-        if "content" in result:
             break
 
     if "content" not in result:
         result["content"] = "Không tìm thấy nội dung"
         result["content_text"] = "Không tìm thấy nội dung"
-
+    
     import html
 
-    # Parse images
     result["images"] = []
     for sel in selector_set.get("images", []):
         imgs = post_elem.select(sel)
-        filtered_imgs = []
-        for img in imgs:
-            # Skip img nếu nằm trong m-post-about
-            skip = False
-            for parent in img.parents:
-                if parent.has_attr("class") and "m-post-about" in parent["class"]:
-                    skip = True
-                    break
-            if skip:
-                continue
+        if imgs:
+            result["images"] = [
+                html.unescape(img["src"]) if img["src"].startswith("http") else "https:" + html.unescape(img["src"])
+                for img in imgs if "src" in img.attrs
+            ]
+            break
 
-            # Nếu không skip, lấy img src
-            if "src" in img.attrs:
-                src = html.unescape(img["src"])
-                if not src.startswith("http"):
-                    src = "https:" + src
-                filtered_imgs.append(src)
-
-        if filtered_imgs:
-            result["images"] = filtered_imgs
-            break  # lấy theo selector đầu tiên match ảnh hợp lệ
-
-    # Parse title
     for sel in selector_set.get("title", []):
         elem = post_elem.select_one(sel)
         if elem and elem.text.strip():
             result["title"] = elem.text.strip()
             break
-
     if "title" not in result or not result["title"].strip():
         first_img = post_elem.select_one("img")
         if first_img and first_img.get("alt"):
@@ -220,9 +144,8 @@ def parse_by_selector(post_elem, selector_set, index_in_list=0):
             result["title"] = result["content_text"][:40].strip()
         else:
             result["title"] = f"Bài số {index_in_list}"
-
+    
     return result
-
 
 def download_images(images, post_id):
     downloaded_images = []
