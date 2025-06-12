@@ -32,9 +32,16 @@ selector_configs = {
         "post_list": ["div.block.article", "div.m-post", "div.block.photo", "div.ztstext.article", "div.m-postdtl", "div.m-post.m-post-photo"],
         "post_url": ["a[href*='.lofter.com/post/']"],
         "title": ["div.header", "h2"],
-        "content": ["div.g-innerbody", "div.content", "div.wrap", "div.text", "div.txtcont", "div.section", "p", "div.ct", "div.section", "div.m-detail",
+        "content": ["div.m-post.m-post-photo", "div.content", "div.wrap", "div.text", "div.txtcont", "div.section", "p", "div.ct", "div.section", "div.m-detail",
         ],
         "images": ["div.content img", "div.wrap img", "div.pic img", "div.m-detail img", "img.img", "img.pic"]
+    },
+    "lofter_tag": {
+        "post_list": ["div.m-mlist"],
+        "post_url": ["div.isayt a.isayc[href*='.lofter.com/post/']"],
+        "title": ["div.m-icnt h2.tit"],
+        "content": ["div.m-icnt div.cnt div.txt[style*='display:none']"],
+        "images": ["div.m-icnt div.cnt div.txt[style*='display:none'] img"]
     },
     "ao3": {
         # cũng riêng, code sẵn rồi
@@ -306,6 +313,132 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
         print(f"Title: {post['title']} - URL: {post['url']} - Time: {post.get('time', '')}")
 
     return posts
+
+def fetch_lofter_tag_posts(url, driver, max_posts=50, wait_time=1, continue_fetch=False, start_date_ts=None, end_date_ts=None, cookies_loaded=False):
+    driver.set_page_load_timeout(60)
+
+    try:
+        driver.get(url)
+    except TimeoutException:
+        print(f"Timeout khi tải {url}, skip trang này")
+        return []
+
+    # Load cookies chỉ lần đầu
+    if not cookies_loaded:
+        if not load_lofter_cookies(driver):
+            return []
+        try:
+            driver.get(url)
+        except TimeoutException:
+            print(f"Timeout khi tải lại {url} sau load cookie, skip trang này")
+            return []
+        time.sleep(2)
+        cookies_loaded = True
+    else:
+        time.sleep(2)
+
+    selector_set = selector_configs["lofter_tag"]
+    post_selector = ", ".join(selector_set.get("post_list", ["div.m-mlist"]))
+
+    print(f"[TAG] Using post_selector: {post_selector}")
+
+    posts = []
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    stop_fetch = False
+
+    if continue_fetch:
+        driver.get(url)
+        time.sleep(2)
+
+    # Cuộn vài lần
+    for _ in range(5):
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            WebDriverWait(driver, wait_time).until(
+                lambda d: d.execute_script("return document.body.scrollHeight") != last_height
+            )
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height or len(posts) >= max_posts:
+                break
+            last_height = new_height
+        except TimeoutException:
+            break
+        except Exception as e:
+            print(f"Error during scroll: {e}")
+            break
+
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+
+    print(f"[TAG] Found {len(soup.select(post_selector))} post elements")
+
+    for post_elem in soup.select(post_selector):
+        if len(posts) >= max_posts:
+            break
+
+        # Parse post_url + time
+        a_elem = post_elem.select_one('div.isayt a.isayc[href*=".lofter.com/post/"]')
+        post_url = ""
+        time_text = ""
+        post_time_ts = None
+
+        if a_elem:
+            post_url = a_elem["href"]
+            if "title" in a_elem.attrs:
+                time_match = re.search(r'(\d{2})/(\d{2})(?:\s+\d{2}:\d{2})?', a_elem["title"])
+                if time_match:
+                    month, day = map(int, time_match.groups())
+                    year = time.localtime().tm_year  # mặc định năm hiện tại
+                    try:
+                        post_time_struct = time.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d")
+                        post_time_ts = time.mktime(post_time_struct)
+                        time_text = f"{year}-{month:02d}-{day:02d}"
+                    except Exception as e:
+                        print(f"[TAG] Không parse được time: {month}/{day}")
+
+        if not post_url:
+            print("[TAG] Không tìm thấy post_url hợp lệ trong post_elem, skip bài này")
+            continue
+
+        # Kiểm tra thời gian lọc
+        if start_date_ts and post_time_ts and post_time_ts < start_date_ts:
+            print(f"[TAG] Bỏ qua post {post_url} vì trước ngày lọc")
+            stop_fetch = True
+            break
+        if end_date_ts and post_time_ts and post_time_ts > end_date_ts:
+            print(f"[TAG] Bỏ qua post {post_url} vì sau ngày lọc")
+            continue
+
+        # Parse nội dung
+        parsed = parse_by_selector(post_elem, selector_set, index_in_list=len(posts))
+
+        # Thêm post nếu không trùng
+        if post_url and post_url not in [p["url"] for p in posts]:
+            posts.append({
+                "title": parsed["title"],
+                "url": post_url,
+                "content": parsed["content"],
+                "images": parsed["images"],
+                "preview": parsed["content_text"][:20] + "..." if parsed["content_text"] else "",
+                "time": time_text
+            })
+            print(f"[TAG] Thêm bài thành công: {parsed['title']} - {post_url} - {time_text}")
+
+    # Next page nếu cần và chưa stop
+    next_link = soup.select_one("a.next, a.next-page")
+    if not stop_fetch and next_link and len(posts) < max_posts:
+        next_url = urljoin(url, next_link["href"])
+        print(f"[TAG] Chuyển sang trang tiếp theo: {next_url}")
+        posts.extend(fetch_lofter_tag_posts(next_url, driver, max_posts, wait_time, continue_fetch=True, start_date_ts=start_date_ts, end_date_ts=end_date_ts, cookies_loaded=cookies_loaded))
+    else:
+        if stop_fetch:
+            print(f"[TAG] Đã gặp bài trước ngày lọc → dừng fetch tiếp")
+
+    print(f"[TAG] Total posts found: {len(posts)}")
+    for post in posts:
+        print(f"[TAG] Title: {post['title']} - URL: {post['url']} - Time: {post.get('time', '')}")
+
+    return posts
+
 
 
 def fetch_forum_chapters(url, driver):
@@ -595,8 +728,13 @@ def fetch_chapters():
         if url_type == "ao3_tag":
             items = fetch_ao3_works(url, driver)
             return jsonify(items)
-        elif url_type in ["lofter_author", "lofter_tag"]:
-            items = fetch_lofter_posts(url, driver, url_type == "lofter_tag", max_posts, wait_time, continue_fetch, start_date_ts, end_date_ts)
+        elif url_type == "lofter_author":
+            items = fetch_lofter_posts(url, driver, False, max_posts, wait_time, continue_fetch, start_date_ts, end_date_ts)
+            if not items:
+                return jsonify({"error": "Không tìm thấy bài viết"}), 400
+            return jsonify(items)
+        elif url_type == "lofter_tag":
+            items = fetch_lofter_tag_posts(url, driver, max_posts, wait_time, continue_fetch, start_date_ts, end_date_ts)
             if not items:
                 return jsonify({"error": "Không tìm thấy bài viết"}), 400
             return jsonify(items)
