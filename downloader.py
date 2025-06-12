@@ -28,30 +28,23 @@ CORS(app)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 selector_configs = {
-    "lofter.com": {
-        "post_list": ["div.m-post", "div.post", "article.post", "div.g-post"],
+    "lofter_author": {
+        "post_list": ["div.block.article", "div.m-post", "div.block.photo", "div.ztstext.article", "div.m-postdtl", "div.m-post.m-post-photo"],
         "post_url": ["a[href*='.lofter.com/post/']"],
-        "title": ["h2", "div.ttl", "div.title", "a.title", "h3"],
-        "content": [
-            "div.txt",
-            "div.content",
-            "div.text",
-            "div.post-content",
-            "div.g-ctc",
-            "div.entry-content",
-            "div.wrap + div.txt",
-            "div.wrap + div.content",
-            "div.wrap + div.text",
-            "div.wrap",
+        "title": ["div.header", "h2"],
+        "content": ["div.g-innerbody", "div.content", "div.wrap", "div.text", "div.txtcont", "div.section", "p", "div.ct", "div.section", "div.m-detail",
         ],
-        "images": ["div.m-post img", "img.postimg", "div.img img", "div.g-img img", "div.entry-content img"]
+        "images": ["div.content img", "div.wrap img", "div.pic img", "div.m-detail img", "img.img", "img.pic"]
+    },
+    "ao3": {
+        # cũng riêng, code sẵn rồi
     }
 }
 
 lofter_cookies = None
 cookie_lock = Lock()
 driver_lock = Lock()
-driver = None  # Tái sử dụng driver
+driver = None
 
 def setup_selenium():
     global driver
@@ -66,6 +59,17 @@ def setup_selenium():
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             driver = webdriver.Chrome(options=options)
         return driver
+
+def setup_new_driver():
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    driver = webdriver.Chrome(options=options)
+    return driver
 
 def load_lofter_cookies(driver, cookie_file="lofter_cookies.json"):
     global lofter_cookies
@@ -85,9 +89,11 @@ def load_lofter_cookies(driver, cookie_file="lofter_cookies.json"):
             return False
         
         driver.get("https://www.lofter.com")
+        time.sleep(2)
         for cookie in valid_cookies:
             driver.add_cookie(cookie)
-        driver.refresh()
+        
+        driver.get("https://www.lofter.com")
         print("Đã tải cookie Lofter hợp lệ.")
         return True
 
@@ -96,51 +102,125 @@ def save_lofter_cookies(driver, cookie_file="lofter_cookies.json"):
         json.dump(driver.get_cookies(), f)
     print("Saved Lofter cookies.")
 
+# def parse_by_selector(post_elem, selector_set, index_in_list=0):
+    # result = {}
+    
+    # for sel in selector_set.get("content", []):
+        # elem = post_elem.select_one(sel)
+        # if elem:
+            # for span in elem.select("span.picNum"):
+                # span.decompose()
+
+            # result["content"] = elem.decode_contents().strip()
+            # result["content_text"] = elem.get_text(separator=" ", strip=True)
+            # break
+
+    # if "content" not in result:
+        # result["content"] = "Không tìm thấy nội dung"
+        # result["content_text"] = "Không tìm thấy nội dung"
+    
+    # import html
+
+    # result["images"] = []
+    # for sel in selector_set.get("images", []):
+        # imgs = post_elem.select(sel)
+        # if imgs:
+            # result["images"] = [
+                # html.unescape(img["src"]) if img["src"].startswith("http") else "https:" + html.unescape(img["src"])
+                # for img in imgs if "src" in img.attrs
+            # ]
+            # break
+
+    # for sel in selector_set.get("title", []):
+        # elem = post_elem.select_one(sel)
+        # if elem and elem.text.strip():
+            # result["title"] = elem.text.strip()
+            # break
+    # if "title" not in result or not result["title"].strip():
+        # first_img = post_elem.select_one("img")
+        # if first_img and first_img.get("alt"):
+            # result["title"] = first_img["alt"].strip()
+        # elif result.get("content_text", "").strip():
+            # result["title"] = result["content_text"][:40].strip()
+        # else:
+            # result["title"] = f"Bài số {index_in_list}"
+    
+    # return result
+
 def parse_by_selector(post_elem, selector_set, index_in_list=0):
     result = {}
-    
+
+    # Parse content
     for sel in selector_set.get("content", []):
-        elem = post_elem.select_one(sel)
-        if elem:
+        elems = post_elem.select(sel)
+        for elem in elems:
+            # Skip nếu ancestor có class m-post-about
+            skip = False
+            for parent in elem.parents:
+                if parent.has_attr("class") and "m-post-about" in parent["class"]:
+                    skip = True
+                    break
+            if skip:
+                continue
+
+            # Clean picNum nếu có
             for span in elem.select("span.picNum"):
                 span.decompose()
 
             result["content"] = elem.decode_contents().strip()
             result["content_text"] = elem.get_text(separator=" ", strip=True)
+            break  # lấy đúng 1 content là đủ
+        if "content" in result:
             break
 
     if "content" not in result:
         result["content"] = "Không tìm thấy nội dung"
         result["content_text"] = "Không tìm thấy nội dung"
-    
+
     import html
 
+    # Parse images
     result["images"] = []
     for sel in selector_set.get("images", []):
         imgs = post_elem.select(sel)
-        if imgs:
-            result["images"] = [
-                html.unescape(img["src"]) if img["src"].startswith("http") else "https:" + html.unescape(img["src"])
-                for img in imgs if "src" in img.attrs
-            ]
-            break
+        filtered_imgs = []
+        for img in imgs:
+            # Skip img nếu nằm trong m-post-about
+            skip = False
+            for parent in img.parents:
+                if parent.has_attr("class") and "m-post-about" in parent["class"]:
+                    skip = True
+                    break
+            if skip:
+                continue
 
-    
+            # Nếu không skip, lấy img src
+            if "src" in img.attrs:
+                src = html.unescape(img["src"])
+                if not src.startswith("http"):
+                    src = "https:" + src
+                filtered_imgs.append(src)
+
+        if filtered_imgs:
+            result["images"] = filtered_imgs
+            break  # lấy theo selector đầu tiên match ảnh hợp lệ
+
+    # Parse title
     for sel in selector_set.get("title", []):
         elem = post_elem.select_one(sel)
         if elem and elem.text.strip():
             result["title"] = elem.text.strip()
             break
+
     if "title" not in result or not result["title"].strip():
         first_img = post_elem.select_one("img")
         if first_img and first_img.get("alt"):
             result["title"] = first_img["alt"].strip()
         elif result.get("content_text", "").strip():
-            # Nếu có content_text → lấy làm title fallback
             result["title"] = result["content_text"][:40].strip()
         else:
             result["title"] = f"Bài số {index_in_list}"
-    
+
     return result
 
 
@@ -179,13 +259,31 @@ def fetch_ao3_works(url, driver):
             break
     return works
 
-def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, continue_fetch=False):
-    driver.get(url)
+def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, continue_fetch=False, start_date_ts=None, end_date_ts=None):
+    driver.set_page_load_timeout(60)
+
+    try:
+        driver.get(url)
+    except TimeoutException:
+        print(f"Timeout khi tải {url}, skip trang này")
+        return []
+
     if not load_lofter_cookies(driver):
         return []
-    driver.get(url)
-    driver.set_page_load_timeout(30)
-    time.sleep(2)  # Giảm xuống 2 giây
+
+    try:
+        driver.get(url)
+    except TimeoutException:
+        print(f"Timeout khi tải lại {url} sau load cookie, skip trang này")
+        return []
+
+    time.sleep(2)
+
+    # Lấy selector set phù hợp
+    selector_set = selector_configs.get("lofter_tag" if is_tag else "lofter_author", {})
+    post_selector = ", ".join(selector_set.get("post_list", ["div.m-post"]))
+
+    print(f"Using post_selector: {post_selector}")
 
     posts = []
     last_height = driver.execute_script("return document.body.scrollHeight")
@@ -194,7 +292,8 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
         driver.get(url)
         time.sleep(2)
 
-    for _ in range(5):  # Giảm số lần cuộn tối đa
+    # Cuộn vài lần cho chắc ăn
+    for _ in range(5):
         try:
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             WebDriverWait(driver, wait_time).until(
@@ -211,49 +310,80 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
             break
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
-    domain = urlparse(url).netloc
-    selector_set = {
-        "content": ["div.txt", "div.content", "div.text", "div.post-content", "div.g-ctc", "div.entry-content", "div.wrap + div.text"],
-        "images": ["img"],
-        "title": ["h1", "h2", "div.ttl", "div.title"]
-    }
 
+    parsed_url = urlparse(url)
+    author_domain = parsed_url.netloc
+    print(f"Author domain: {author_domain}")
 
-    print(f"Found {len(soup.select(', '.join(selector_set.get('post_list', ['div.m-post']))))} post elements")
-    for post_elem in soup.select(", ".join(selector_set.get("post_list", ["div.m-post"]))):
+    print(f"Found {len(soup.select(post_selector))} post elements")
+    for post_elem in soup.select(post_selector):
         if len(posts) >= max_posts:
             break
-        post_url_elem = post_elem.select_one(", ".join(selector_set.get("post_url", ["a[href*='.lofter.com/post/']"])))
-        post_url = urljoin(url, post_url_elem["href"]) if post_url_elem else ""
 
-        parsed = parse_by_selector(post_elem, selector_set, len(posts)+1)
-        post_id = post_url.split("/")[-1] if post_url else f"post_{len(posts)}"
-        downloaded_images = download_images([urljoin(url, img) for img in parsed["images"]], post_id)
+        # Tìm post_url trong từng a[href]
+        post_url = ""
+        for a_elem in post_elem.select("a[href]"):
+            href = a_elem["href"]
+            full_url = urljoin(url, href)
+            if full_url.startswith(f"https://{author_domain}/post/"):
+                post_url = full_url
+                print(f"Found post_url: {post_url}")
+                break
 
+        if not post_url:
+            print("Không tìm thấy post_url hợp lệ trong post_elem, skip bài này")
+            continue
+
+        # Parse thời gian
+        time_elem = post_elem.select_one("span.time, div.time, div.info .time")
+        post_time_ts = None
+        if time_elem and time_elem.text.strip():
+            try:
+                post_time_struct = time.strptime(time_elem.text.strip(), "%Y-%m-%d")
+                post_time_ts = time.mktime(post_time_struct)
+            except Exception as e:
+                print(f"Không parse được time: {time_elem.text.strip()}")
+
+        if start_date_ts and post_time_ts and post_time_ts < start_date_ts:
+            print(f"Bỏ qua post {post_url} vì trước ngày lọc")
+            continue
+        if end_date_ts and post_time_ts and post_time_ts > end_date_ts:
+            print(f"Bỏ qua post {post_url} vì sau ngày lọc")
+            continue
+
+        # Parse nội dung
+        parsed = parse_by_selector(post_elem, selector_set, index_in_list=len(posts))
+
+        # Thêm post nếu không trùng
         if post_url and post_url not in [p["url"] for p in posts]:
             posts.append({
                 "title": parsed["title"],
                 "url": post_url,
                 "content": parsed["content"],
-                "images": downloaded_images,
-                "preview": parsed.get("content_text", "")[:40].strip() if parsed.get("content_text") else ""
+                "images": parsed["images"],
+                "preview": parsed["content_text"][:20] + "..." if parsed["content_text"] else "",
+                "time": time_elem.text.strip() if time_elem and time_elem.text.strip() else ""
             })
+            print(f"Thêm bài thành công: {parsed['title']} - {post_url}")
 
+    # Xử lý next page nếu có
     next_link = soup.select_one("a.next, a.next-page")
     if next_link and is_tag and len(posts) < max_posts:
         next_url = urljoin(url, next_link["href"])
-        posts.extend(fetch_lofter_posts(next_url, driver, is_tag, max_posts, wait_time))
+        print(f"Chuyển sang trang tiếp theo: {next_url}")
+        posts.extend(fetch_lofter_posts(next_url, driver, is_tag, max_posts, wait_time, start_date_ts=start_date_ts, end_date_ts=end_date_ts))
 
+    # Debug HTML nếu cần
+    os.makedirs("temp", exist_ok=True)
     with open("temp/page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
+
     print(f"Total posts found: {len(posts)}")
     for post in posts:
-        print(f"Title: {post['title']}")
-        print(f"Content: {post['content'][:100]}...")
-        print(f"Images: {post['images']}")
-        print(f"Preview: {post['preview']}")
+        print(f"Title: {post['title']} - URL: {post['url']} - Time: {post.get('time', '')}")
 
     return posts
+
 
 def fetch_forum_chapters(url, driver):
     driver.get(url)
@@ -275,54 +405,28 @@ def fetch_forum_chapters(url, driver):
             chapters.append({
                 "title": title,
                 "content": content_html,
-                "images": []  # Placeholder
+                "images": []
             })
 
     return {"main_title": main_title, "chapters": chapters}
 
 def download_content(url, driver):
-    driver.get(url)
-    load_lofter_cookies(driver)
-    driver.set_page_load_timeout(60)
-
-    try:
-        driver.get(url)
-    except TimeoutException:
-        print(f"Timeout khi tải {url}, bỏ qua")
+    driver.set_page_load_timeout(180)
+    if not load_lofter_cookies(driver):
+        print(f"Không thể tải cookie cho {url}, trả về nội dung rỗng")
         return {
-            "title": "Timeout",
+            "title": f"Không tải được cookie",
             "text": "",
             "images": []
         }
 
+    time.sleep(2)  # Để tránh load lỗi cookie xong driver.get liền
 
-    time.sleep(2)
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    
     domain = urlparse(url).netloc
     is_lofter_post = "lofter.com" in domain
 
     if is_lofter_post:
-        selector_set = {
-            "content": [
-                "div.post-content",
-                "article.post div.content",
-                "div.g-ctc",
-                "div.entry-content",
-            ],
-            "images": [
-                "div.post-content img",
-                "article.post img",
-                "div.g-ctc img",
-                "div.entry-content img"
-            ],
-            "title": [
-                "h1.post-title",
-                "div.ttl",
-                "div.title",
-                "h1"
-            ]
-        }
+        selector_set = selector_configs["lofter_author"]
     else:
         selector_set = {
             "content": [
@@ -341,8 +445,97 @@ def download_content(url, driver):
             "title": ["h1", "h2", "div.ttl", "div.title"]
         }
 
+    wait_selector = ", ".join(selector_set.get("content", ["div.g-innerbody", "div.text", "div.txtcont", "div.section", "p", "div.ct"]))
 
-    parsed = parse_by_selector(soup, selector_set)
+    try:
+        driver.get(url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, wait_selector))
+        )
+    except TimeoutException:
+        print(f"Timeout khi tải {url}, thử refresh lại lần nữa")
+        try:
+            driver.execute_script("window.stop();")
+            time.sleep(2)
+            driver.get(url)
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, wait_selector))
+            )
+        except TimeoutException:
+            print(f"Retry cũng timeout với {url}, bỏ qua")
+            return {
+                "title": f"Timeout: {url}",
+                "text": "",
+                "images": []
+            }
+
+    time.sleep(2)
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+
+    if is_lofter_post:
+        post_selector = ", ".join(selector_set.get("post_list", ["div.m-post"]))
+        post_elem = soup.select_one(post_selector)
+
+        if not post_elem:
+            print(f"Không tìm thấy post element với {post_selector}, thử fallback")
+            for sel in selector_set.get("content", []):
+                elems = soup.select(sel)
+                for elem in elems:
+                    # Check nếu ancestor có class m-post-about → skip
+                    skip = False
+                    for parent in elem.parents:
+                        if parent.has_attr("class") and "m-post-about" in parent["class"]:
+                            skip = True
+                            break
+                    if skip:
+                        continue
+
+                    # Nếu không skip → lấy elem này
+                    post_elem = elem
+                    break
+                if post_elem:
+                    break
+
+
+        if not post_elem:
+            print(f"Không tìm thấy post element trong {url}, thử parse body")
+            post_elem = soup.select_one("body")
+            if not post_elem:
+                print(f"Không tìm thấy body trong {url}, skip")
+                return {
+                    "title": f"Không tìm thấy nội dung",
+                    "text": "",
+                    "images": []
+                }
+
+        parsed = parse_by_selector(post_elem, selector_set)
+
+        if parsed["content"] == "Không tìm thấy nội dung":
+            print(f"Nội dung parse không hợp lệ cho {url}, log HTML để debug")
+            with open(f"temp/debug_{url.split('/')[-1]}.html", "w", encoding="utf-8") as f:
+                f.write(str(soup))
+
+    else:
+        # Generic parse
+        post_elem = None
+        for sel in selector_set.get("content", []):
+            post_elem = soup.select_one(sel)
+            if post_elem:
+                break
+
+        if not post_elem:
+            print(f"Không tìm thấy post element trong {url}, thử parse body")
+            post_elem = soup.select_one("body")
+            if not post_elem:
+                print(f"Không tìm thấy body trong {url}, skip")
+                return {
+                    "title": f"Không tìm thấy nội dung",
+                    "text": "",
+                    "images": []
+                }
+
+        parsed = parse_by_selector(post_elem, selector_set)
+
     post_id = url.split("/")[-1]
     downloaded_images = download_images([urljoin(url, img) for img in parsed["images"]], post_id)
 
@@ -353,6 +546,7 @@ def download_content(url, driver):
     }
 
     return content
+
 
 def create_html(chapters, main_title):
     html = f"""
@@ -375,8 +569,9 @@ def create_html(chapters, main_title):
         html += f'<div>{chapter["content"]}</div>'
         for img in chapter.get("images", []):
             if img and os.path.exists(img):
-                img_rel_path = os.path.relpath(img, "temp").replace("\\", "/")
-                html += f'<img src="{img_rel_path}" alt="Image" style="max-width:100%;"><br>'
+                img_filename = os.path.basename(img)
+                shutil.copy(img, os.path.join("temp", img_filename))
+                html += f'<img src="{img_filename}" alt="Image" style="max-width:100%;"><br>'
 
     html += "</body></html>"
 
@@ -459,8 +654,18 @@ def fetch_chapters():
     url = data.get('url')
     url_type = data.get('type')
     max_posts = data.get('max_posts', 50)
-    wait_time = data.get('wait_time', 1)  # Giảm mặc định xuống 1 giây
+    wait_time = data.get('wait_time', 1)
     continue_fetch = data.get('continue_fetch', False)
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
+
+    start_date_ts = None
+    end_date_ts = None
+
+    if start_date_str:
+        start_date_ts = time.mktime(time.strptime(start_date_str, "%Y-%m-%d"))
+    if end_date_str:
+        end_date_ts = time.mktime(time.strptime(end_date_str, "%Y-%m-%d"))
     driver = setup_selenium()
 
     try:
@@ -468,7 +673,7 @@ def fetch_chapters():
             items = fetch_ao3_works(url, driver)
             return jsonify(items)
         elif url_type in ["lofter_author", "lofter_tag"]:
-            items = fetch_lofter_posts(url, driver, url_type == "lofter_tag", max_posts, wait_time, continue_fetch)
+            items = fetch_lofter_posts(url, driver, url_type == "lofter_tag", max_posts, wait_time, continue_fetch, start_date_ts, end_date_ts)
             if not items:
                 return jsonify({"error": "Không tìm thấy bài viết"}), 400
             return jsonify(items)
@@ -478,7 +683,6 @@ def fetch_chapters():
         else:
             return jsonify({"error": "Invalid URL type"}), 400
     finally:
-        # Không quit driver để tái sử dụng
         pass
 
 @app.route("/download", methods=["POST"])
@@ -487,44 +691,78 @@ def download():
     driver = setup_selenium()
 
     try:
-        if data.get("type") == "forum":
-            main_title = data.get("main_title", "Forum Thread")
+        type_ = data.get("type", "generic")
+        output_format = data.get("format", "epub").lower()
+        main_title = data.get("main_title", "Downloaded Content")
+        safe_main_title = sanitize_filename(main_title)
+
+        if type_ == "forum":
             chapters = data.get("chapters", [])
-            output_format = data.get("format", "epub").lower()
-            safe_main_title = sanitize_filename(main_title)
             html_file = create_html(chapters, safe_main_title)
             output_file = convert_to_format(html_file, output_format, safe_main_title)
 
-            with open(output_file, "rb") as f:
-                file_data = f.read()
-            file_name = os.path.basename(output_file)
-            cleanup_temp()
-            return send_file(
-                io.BytesIO(file_data),
-                as_attachment=True,
-                download_name=file_name,
-                mimetype=f"application/{'vnd.openxmlformats-officedocument.wordprocessingml.document' if output_format == 'docx' else output_format}"
-            )
-
-        urls = data.get("urls", [])
-        output_format = data.get("format", "epub").lower()
-        main_title = data.get("main_title", "Lofter Posts")
-
-        if any("lofter.com" in url for url in urls):
+        elif type_ == "lofter":
+            urls = data.get("urls", [])
+            chapters = []
+            
+            driver = setup_selenium()
             load_lofter_cookies(driver)
 
-        chapters = []
-        for url in urls:
-            content = download_content(url, driver)
-            chapters.append({
-                "title": content["title"],
-                "content": content["text"],
-                "images": content["images"]
-            })
+            for url in urls:
+                print(f"Download bằng driver global: {url}")
+                time.sleep(1.5)
 
-        safe_main_title = sanitize_filename(main_title)
-        html_file = create_html(chapters, safe_main_title)
-        output_file = convert_to_format(html_file, output_format, safe_main_title)
+                try:
+                    # Không cần load_lofter_cookies(driver) nữa nếu đã load bên ngoài rồi.
+                    content = download_content(url, driver)  # <<< xài driver global
+                    chapters.append({
+                        "title": content["title"],
+                        "content": content["text"],
+                        "images": content["images"]
+                    })
+                except Exception as e:
+                    print(f"Error downloading {url}: {e}")
+                    chapters.append({
+                        "title": f"Error downloading {url}",
+                        "content": "",
+                        "images": []
+                    })
+                finally:
+                    time.sleep(1.5)
+
+            html_file = create_html(chapters, safe_main_title)
+            output_file = convert_to_format(html_file, output_format, safe_main_title)
+
+        elif type_ == "ao3":
+            urls = data.get("urls", [])
+            chapters = []
+            for url in urls:
+                driver.get(url)
+                time.sleep(2)
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                content_elem = soup.select_one("div#workskin")
+                content_html = content_elem.decode_contents() if content_elem else ""
+                content_text = content_elem.get_text(separator=" ", strip=True) if content_elem else ""
+                chapters.append({
+                    "title": soup.select_one("h2.title").text.strip() if soup.select_one("h2.title") else url,
+                    "content": content_html,
+                    "images": []
+                })
+            html_file = create_html(chapters, safe_main_title)
+            output_file = convert_to_format(html_file, output_format, safe_main_title)
+
+        else:
+            urls = data.get("urls", [])
+            chapters = []
+            for url in urls:
+                content = download_content(url, driver)
+                chapters.append({
+                    "title": content["title"],
+                    "content": content["text"],
+                    "images": content["images"]
+                })
+            html_file = create_html(chapters, safe_main_title)
+            output_file = convert_to_format(html_file, output_format, safe_main_title)
 
         with open(output_file, "rb") as f:
             file_data = f.read()
@@ -537,7 +775,6 @@ def download():
             mimetype=f"application/{'vnd.openxmlformats-officedocument.wordprocessingml.document' if output_format == 'docx' else output_format}"
         )
     finally:
-        # Không quit driver để tái sử dụng
         pass
 
 @app.route('/')
@@ -553,4 +790,4 @@ if __name__ == "__main__":
         app.run(debug=True, host="0.0.0.0", port=5000, threaded=True)
     finally:
         if driver:
-            driver.quit()  # Quit driver khi ứng dụng dừng
+            driver.quit()

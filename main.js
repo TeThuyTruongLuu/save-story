@@ -283,10 +283,12 @@ export async function fetchChapters(continueFetch = false) {
     logMessage(`Fetching chapters from ${url} (type: ${urlType}, max: ${maxPosts}, wait: ${waitTime}s)...`);
     try {
         let lastUrl = continueFetch ? localStorage.getItem("lastFetchUrl") || url : url;
+		const startDate = document.getElementById("startDate").value;
+		const endDate = document.getElementById("endDate").value;
         const response = await fetch("http://localhost:5000/fetch-chapters", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: lastUrl, type: urlType, max_posts: maxPosts, wait_time: waitTime, continue_fetch: continueFetch })
+            body: JSON.stringify({ url: lastUrl, type: urlType, max_posts: maxPosts, wait_time: waitTime, continue_fetch: continueFetch, start_date: startDate, end_date: endDate })
         });
 
         if (!response.ok) {
@@ -353,6 +355,7 @@ export async function downloadSelected() {
     }
 
     let bodyData = { format: outputFormat };
+
     if (urlType === "forum") {
         if (!window.currentChapters) {
             alert("Danh sách chương không tồn tại!");
@@ -376,15 +379,30 @@ export async function downloadSelected() {
         };
     } else {
         const urls = Array.from(checkboxes).map(cb => cb.dataset.url);
-        bodyData = { urls, format: outputFormat };
+
+        bodyData = { 
+            type: urlType.startsWith("lofter") ? "lofter" : urlType.startsWith("ao3") ? "ao3" : "generic",
+            urls,
+            format: outputFormat
+        };
     }
 
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.error("Download request aborted due to timeout.");
+            alert("Tải file bị timeout, thử lại với ít bài hơn hoặc chờ lâu hơn!");
+        }, 600000); // 10 phút timeout
+
         const response = await fetch("http://localhost:5000/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(bodyData)
+            body: JSON.stringify(bodyData),
+            signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error("Lỗi khi tải file!");
