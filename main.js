@@ -389,11 +389,11 @@ export async function downloadSelected() {
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-            controller.abort();
-            console.error("Download request aborted due to timeout.");
-            alert("Tải file bị timeout, thử lại với ít bài hơn hoặc chờ lâu hơn!");
-        }, 600000); // 10 phút timeout
+        // const timeoutId = setTimeout(() => {
+            // controller.abort();
+            // console.error("Download request aborted due to timeout.");
+            // alert("Tải file bị timeout, thử lại với ít bài hơn hoặc chờ lâu hơn!");
+        // }, 600000); // 10 phút timeout
 
         const response = await fetch("http://localhost:5000/download", {
             method: "POST",

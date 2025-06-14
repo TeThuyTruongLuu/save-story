@@ -128,14 +128,26 @@ def parse_by_selector(post_elem, selector_set, index_in_list=0):
     
     import html
 
+
     result["images"] = []
     for sel in selector_set.get("images", []):
         imgs = post_elem.select(sel)
         if imgs:
-            result["images"] = [
-                html.unescape(img["src"]) if img["src"].startswith("http") else "https:" + html.unescape(img["src"])
-                for img in imgs if "src" in img.attrs
-            ]
+            for img in imgs:
+                try:
+                    # Ưu tiên bigimgsrc từ <a> nếu có
+                    parent_a = img.find_parent("a")
+                    if parent_a and parent_a.has_attr("bigimgsrc"):
+                        img_url = parent_a["bigimgsrc"]
+                    else:
+                        img_url = img["src"] if img["src"].startswith("http") else "https:" + img["src"]
+                    clean_url = img_url.split('?')[0].split('!')[0]
+                    clean_url = html.unescape(clean_url)
+
+                    result["images"].append(clean_url)
+                except Exception as e:
+                    import logging
+                    logging.info(f"Lỗi khi parse ảnh: {e}")
             break
 
     for sel in selector_set.get("title", []):
@@ -157,10 +169,21 @@ def parse_by_selector(post_elem, selector_set, index_in_list=0):
 def download_images(images, post_id):
     downloaded_images = []
     os.makedirs("temp/images", exist_ok=True)
-    
+        
     for i, img_url in enumerate(images):
         try:
-            response = requests.get(img_url, stream=True, timeout=10)
+            # Clean lại 1 lần nữa để chắc ăn
+            clean_url = img_url.split('?')[0].split('!')[0]
+
+            # Nếu là ảnh Discord thì set header để cứu
+            headers = {}
+            if 'discordapp.com' in clean_url or 'media.discordapp.net' in clean_url:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0",
+                    "Referer": "https://discord.com/"
+                }
+
+            response = requests.get(clean_url, stream=True, timeout=10, headers=headers)
             response.raise_for_status()
             img_path = f"temp/images/{post_id}_{i}.jpg"
             with open(img_path, "wb") as f:
@@ -169,6 +192,7 @@ def download_images(images, post_id):
         except Exception as e:
             print(f"Không thể tải hình ảnh {img_url}: {e}")
             downloaded_images.append(None)
+
     
     return downloaded_images
 
@@ -209,7 +233,6 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
 
     time.sleep(2)
 
-    # Lấy selector set phù hợp
     selector_set = selector_configs.get("lofter_tag" if is_tag else "lofter_author", {})
     post_selector = ", ".join(selector_set.get("post_list", ["div.m-post"]))
 
@@ -248,9 +271,9 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
     print(f"Found {len(soup.select(post_selector))} post elements")
     for post_elem in soup.select(post_selector):
         if len(posts) >= max_posts:
+            print(f"Đã đủ {max_posts} bài → dừng parse bài trong trang hiện tại")
             break
 
-        # Tìm post_url trong từng a[href]
         post_url = ""
         for a_elem in post_elem.select("a[href]"):
             href = a_elem["href"]
@@ -264,7 +287,6 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
             print("Không tìm thấy post_url hợp lệ trong post_elem, skip bài này")
             continue
 
-        # Parse thời gian
         time_elem = post_elem.select_one("span.time, div.time, div.info .time")
         post_time_ts = None
         if time_elem and time_elem.text.strip():
@@ -281,10 +303,8 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
             print(f"Bỏ qua post {post_url} vì sau ngày lọc")
             continue
 
-        # Parse nội dung
         parsed = parse_by_selector(post_elem, selector_set, index_in_list=len(posts))
 
-        # Thêm post nếu không trùng
         if post_url and post_url not in [p["url"] for p in posts]:
             posts.append({
                 "title": parsed["title"],
@@ -298,21 +318,24 @@ def fetch_lofter_posts(url, driver, is_tag=False, max_posts=50, wait_time=1, con
 
     # Xử lý next page nếu có
     next_link = soup.select_one("a.next, a.next-page")
-    if next_link and is_tag and len(posts) < max_posts:
+    remaining_posts = max_posts - len(posts)
+    if next_link and remaining_posts > 0:
         next_url = urljoin(url, next_link["href"])
-        print(f"Chuyển sang trang tiếp theo: {next_url}")
-        posts.extend(fetch_lofter_posts(next_url, driver, is_tag, max_posts, wait_time, start_date_ts=start_date_ts, end_date_ts=end_date_ts))
-
-    # Debug HTML nếu cần
-    os.makedirs("temp", exist_ok=True)
-    with open("temp/page_source.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
+        print(f"Chuyển sang trang tiếp theo: {next_url} (còn cần lấy {remaining_posts} bài)")
+        next_page_posts = fetch_lofter_posts(next_url, driver, is_tag, remaining_posts, wait_time, start_date_ts=start_date_ts, end_date_ts=end_date_ts)
+        posts.extend(next_page_posts)
+    else:
+        if remaining_posts <= 0:
+            print(f"Đã đủ {max_posts} bài tổng → không fetch tiếp trang sau")
+        else:
+            print("Không có next page → dừng fetch")
 
     print(f"Total posts found: {len(posts)}")
     for post in posts:
         print(f"Title: {post['title']} - URL: {post['url']} - Time: {post.get('time', '')}")
 
     return posts
+
 
 def fetch_lofter_tag_posts(url, driver, max_posts=50, wait_time=1, continue_fetch=False, start_date_ts=None, end_date_ts=None, cookies_loaded=False):
     driver.set_page_load_timeout(60)
@@ -441,30 +464,54 @@ def fetch_lofter_tag_posts(url, driver, max_posts=50, wait_time=1, continue_fetc
 
 
 
-def fetch_forum_chapters(url, driver):
-    driver.get(url)
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    main_title = soup.select_one("h1.p-title-value").text.strip() if soup.select_one("h1.p-title-value") else "Forum Thread"
-
+def fetch_forum_chapters(url, driver, max_posts=50):
+    current_url = url
     chapters = []
-    for idx, article in enumerate(soup.select("article.message")):
-        content_div = article.select_one("div.bbWrapper")
-        user_link = article.select_one("h4.message-name a.username")
+    main_title = ""
 
-        if content_div and user_link:
-            username = user_link.text.strip()
-            content_html = content_div.decode_contents()
-            content_text = BeautifulSoup(content_html, "html.parser").get_text(separator=" ", strip=True)
-            preview = content_text[:20] + "..." if len(content_text) > 20 else content_text
-            title = f"{username}: {preview}"
+    while current_url and len(chapters) < max_posts:
+        driver.get(current_url)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
 
-            chapters.append({
-                "title": title,
-                "content": content_html,
-                "images": []
-            })
+        if not main_title:
+            main_title = soup.select_one("h1.p-title-value").text.strip() if soup.select_one("h1.p-title-value") else "Forum Thread"
 
+        print(f"[Forum] Đang fetch page: {current_url}")
+
+        for idx, article in enumerate(soup.select("article.message")):
+            if len(chapters) >= max_posts:
+                break
+
+            content_div = article.select_one("div.bbWrapper")
+            user_link = article.select_one("h4.message-name a.username")
+
+            if content_div and user_link:
+                username = user_link.text.strip()
+                content_html = content_div.decode_contents()
+                content_text = BeautifulSoup(content_html, "html.parser").get_text(separator=" ", strip=True)
+                preview = content_text[:20] + "..." if len(content_text) > 20 else content_text
+                title = f"{username}: {preview}"
+
+                chapters.append({
+                    "title": title,
+                    "content": content_html,
+                    "images": []
+                })
+
+                print(f"[Forum] Thêm bài: {title}")
+
+        # Xử lý next page nếu có
+        next_link = soup.select_one("a.pageNav-jump--next") or soup.select_one("a.pageNavSimple-el--next")
+        if next_link and len(chapters) < max_posts:
+            next_href = next_link["href"]
+            current_url = urljoin(current_url, next_href)
+            print(f"[Forum] Chuyển sang trang tiếp theo: {current_url}")
+        else:
+            break
+
+    print(f"[Forum] Total chapters found: {len(chapters)}")
     return {"main_title": main_title, "chapters": chapters}
+
 
 def download_content(url, driver):
     driver.set_page_load_timeout(180)
